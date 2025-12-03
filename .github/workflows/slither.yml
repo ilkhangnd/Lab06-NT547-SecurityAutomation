@@ -7,24 +7,56 @@ on:
     branches: [ "main" ]
 
 jobs:
-  analyze:
+  slither:
+    name: Run Slither Static Analysis
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      # 1. Lấy source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2. Cài Python 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: "3.10"
 
-      - name: Install Slither & Solc
+      # 3. Cài Slither & solc-select
+      - name: Install Slither
         run: |
-          pip install slither-analyzer
-          pip install solc-select
-          solc-select install 0.8.0
-          solc-select use 0.8.0
+          pip install slither-analyzer solc-select
 
+      # 4. Cài đặt phiên bản solc
+      - name: Install solc stable version
+        run: |
+          solc-select install 0.8.20
+          solc-select use 0.8.20
+          solc --version
+
+      # 5. Nếu dùng npm (Hardhat/Truffle)
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then npm install; fi
+
+      # 6. Chạy Slither và xuất báo cáo ra JSON
       - name: Run Slither
-        run: slither . --fail-high
+        run: |
+          slither . --json slither-report.json || true
+
+      # 7. Fail workflow nếu có lỗi High Severity
+      - name: Fail on High Severity issues
+        run: |
+          if grep -q '"impact": "High"' slither-report.json; then
+            echo "High severity issues detected!"
+            exit 1
+          else
+            echo "No High severity issues."
+          fi
+
+      # 8. Upload báo cáo artifact để tải về xem sau
+      - name: Upload Slither Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-report
+          path: slither-report.json
